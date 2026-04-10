@@ -8,15 +8,16 @@ import (
 	tgClient "telegrambot/clients/telegram"
 	event_consumer "telegrambot/consumer/event-consumer"
 	"telegrambot/events/telegram"
-	"telegrambot/storage/sqlite"
+	"telegrambot/storage/postgres"
 
 	"github.com/joho/godotenv"
 )
 
 const (
-	tgBotHost         = "api.telegram.org"
-	sqliteStoragePath = "data/sqlite/storage.db"
-	batchSize         = 100
+	tgBotHost           = "api.telegram.org"
+	sqliteStoragePath   = "data/sqlite/storage.db"
+	postgresStoragePath = "postgres://postgres:78552306@localhost:5432/storagedb?sslmode=disable"
+	batchSize           = 100
 )
 
 func main() {
@@ -28,8 +29,12 @@ func main() {
 	if token == "" {
 		log.Fatal("TG_BOT_TOKEN is not set in .env or enviroment")
 	}
-	//s := files.New(storagePath)
-	s, err := sqlite.New(sqliteStoragePath)
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Fatal("DATABASE_URL is not set")
+	}
+	s, err := postgres.New(dbURL)
 	if err != nil {
 		log.Fatal("can't connect to storage: %w", err)
 	}
