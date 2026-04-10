@@ -14,11 +14,16 @@ const (
 	RndCmd   = "/rnd"
 	HelpCmd  = "/help"
 	StartCmd = "/start"
+	ListCmd  = "/list"
 	Taslim   = "Ва Алейкум Ас Салям👋"
 )
 
 func (p *Processor) doCmd(text string, chatId int, username string, chatType string) error {
 	text = strings.TrimSpace(text)
+
+	if username == "" {
+		return p.tg.SendMessage(chatId, msgNoUsername)
+	}
 
 	log.Printf("get new command '%s' from '%s'", text, username)
 
@@ -33,6 +38,8 @@ func (p *Processor) doCmd(text string, chatId int, username string, chatType str
 		return p.sendHelp(chatId)
 	case StartCmd:
 		return p.sendHello(chatId)
+	case ListCmd:
+		return p.sendList(chatId, username)
 	default:
 		if isGreeting(text) {
 			return p.tg.SendMessage(chatId, Taslim)
@@ -87,6 +94,29 @@ func (p *Processor) sendRandom(chatId int, username string) (err error) {
 	}
 
 	return p.storage.Remove(context.Background(), page)
+}
+
+func (p *Processor) sendList(chatId int, username string) (err error) {
+	defer func() { err = e.WrapIfErr("can't do command: can't send all saved pages", err) }()
+
+	pages, err := p.storage.List(context.Background(), username)
+	if err != nil && !errors.Is(err, storage.ErrNoSavedPages) {
+		return err
+	}
+	if errors.Is(err, storage.ErrNoSavedPages) {
+		return p.tg.SendMessage(chatId, msgNoSavedPages)
+	}
+	var urls strings.Builder
+
+	for _, page := range pages {
+		urls.WriteString(page.URL + "\n")
+	}
+
+	if err := p.tg.SendMessage(chatId, urls.String()); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *Processor) sendHelp(chatId int) error {

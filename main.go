@@ -14,10 +14,8 @@ import (
 )
 
 const (
-	tgBotHost           = "api.telegram.org"
-	sqliteStoragePath   = "data/sqlite/storage.db"
-	postgresStoragePath = "postgres://postgres:78552306@localhost:5432/storagedb?sslmode=disable"
-	batchSize           = 100
+	tgBotHost = "api.telegram.org"
+	batchSize = 100
 )
 
 func main() {
@@ -36,11 +34,11 @@ func main() {
 	}
 	s, err := postgres.New(dbURL)
 	if err != nil {
-		log.Fatal("can't connect to storage: %w", err)
+		log.Fatal("can't connect to storage: ", err)
 	}
 
 	if err = s.Init(context.TODO()); err != nil {
-		log.Fatal("can't init storage: %w", err)
+		log.Fatal("can't init storage: ", err)
 	}
 	eventsProcessor := telegram.New(
 		tgClient.New(tgBotHost, token),
