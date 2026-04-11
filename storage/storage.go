@@ -10,16 +10,20 @@ import (
 )
 
 type Storage interface {
-	Save(ctx context.Context, p *Page) error
+	Save(ctx context.Context, p *Page) (*int, error)
 	PickRandom(ctx context.Context, UserName string) (*Page, error)
-	Remove(ctx context.Context, p *Page) error
+	Delete(ctx context.Context, p *Page) error
 	IsExists(ctx context.Context, p *Page) (bool, error)
 	List(ctx context.Context, UserName string) ([]*Page, error)
 }
 
-var ErrNoSavedPages = errors.New("no saved pages")
+var (
+	ErrNoSavedPages = errors.New("no saved pages")
+	ErrPageNotFound = errors.New("page not found")
+)
 
 type Page struct {
+	Id       int
 	URL      string
 	UserName string
 }

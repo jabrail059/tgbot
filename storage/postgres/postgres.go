@@ -28,14 +28,14 @@ func New(connStr string) (*Storage, error) {
 }
 
 // Save saves page to storage.
-func (s *Storage) Save(ctx context.Context, p *storage.Page) error {
-	q := `INSERT INTO pages (url, user_name) VALUES ($1, $2)`
-
-	if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName); err != nil {
-		return fmt.Errorf("can't save page: %w", err)
+func (s *Storage) Save(ctx context.Context, p *storage.Page) (*int, error) {
+	q := `INSERT INTO pages (url, user_name) VALUES ($1, $2) RETURNING id`
+	var id int
+	if err := s.db.QueryRowContext(ctx, q, p.URL, p.UserName).Scan(&id); err != nil {
+		return nil, fmt.Errorf("can't save page: %w", err)
 	}
 
-	return nil
+	return &id, nil
 }
 
 // PickRandom picks random page from storage.
@@ -58,19 +58,26 @@ func (s *Storage) PickRandom(ctx context.Context, userName string) (*storage.Pag
 	}, nil
 }
 
-// Remove removes page from storage.
-func (s *Storage) Remove(ctx context.Context, p *storage.Page) error {
-	q := `DELETE FROM pages WHERE url = $1 AND user_name = $2`
-	if _, err := s.db.ExecContext(ctx, q, p.URL, p.UserName); err != nil {
+// Delete removes page from storage.
+func (s *Storage) Delete(ctx context.Context, p *storage.Page) error {
+	q := `DELETE FROM pages WHERE id = $1 AND user_name = $2`
+	rows, err := s.db.ExecContext(ctx, q, p.Id, p.UserName)
+	if err != nil {
 		return fmt.Errorf("can't remove page: %w", err)
 	}
 
-	return nil
+	if n, err := rows.RowsAffected(); err != nil {
+		return fmt.Errorf("can't remove page: %w", err)
+	} else if n == 0 {
+		return storage.ErrPageNotFound
+	} else {
+		return nil
+	}
 }
 
 // List returns all saved pages from storage
 func (s *Storage) List(ctx context.Context, userName string) ([]*storage.Page, error) {
-	q := `SELECT url, user_name FROM pages WHERE user_name = $1 ORDER BY url`
+	q := `SELECT id, url, user_name FROM pages WHERE user_name = $1 ORDER BY url`
 
 	rows, err := s.db.QueryContext(ctx, q, userName)
 	if err != nil {
@@ -81,7 +88,7 @@ func (s *Storage) List(ctx context.Context, userName string) ([]*storage.Page, e
 	var pages []*storage.Page
 	for rows.Next() {
 		var p storage.Page
-		err := rows.Scan(&p.URL, &p.UserName)
+		err := rows.Scan(&p.Id, &p.URL, &p.UserName)
 		if err != nil {
 			return nil, fmt.Errorf("can't scan page: %w", err)
 		}
@@ -114,6 +121,7 @@ func (s *Storage) IsExists(ctx context.Context, p *storage.Page) (bool, error) {
 func (s *Storage) Init(ctx context.Context) error {
 	q := `
 		 CREATE TABLE IF NOT EXISTS pages (
+		 	id SERIAL PRIMARY KEY,
             url       TEXT NOT NULL,
             user_name TEXT NOT NULL
         );

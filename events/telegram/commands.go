@@ -3,19 +3,22 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"telegrambot/lib/e"
 	"telegrambot/storage"
 )
 
 const (
-	RndCmd   = "/rnd"
-	HelpCmd  = "/help"
-	StartCmd = "/start"
-	ListCmd  = "/list"
-	Taslim   = "Ва Алейкум Ас Салям👋"
+	RndCmd    = "/rnd"
+	HelpCmd   = "/help"
+	StartCmd  = "/start"
+	ListCmd   = "/list"
+	DeleteCmd = "/delete "
+	Taslim    = "Ва Алейкум Ас Салям👋"
 )
 
 func (p *Processor) doCmd(text string, chatId int, username string, chatType string) error {
@@ -31,6 +34,9 @@ func (p *Processor) doCmd(text string, chatId int, username string, chatType str
 		return p.savePage(chatId, text, username)
 	}
 
+	if strings.HasPrefix(text, DeleteCmd) {
+		return p.deletePage(chatId, text, username)
+	}
 	switch text {
 	case RndCmd:
 		return p.sendRandom(chatId, username)
@@ -66,12 +72,12 @@ func (p *Processor) savePage(chatId int, pageURL string, username string) (err e
 	if isExists {
 		return p.tg.SendMessage(chatId, msgAlreadyExists)
 	}
-
-	if err := p.storage.Save(context.Background(), page); err != nil {
+	id, err := p.storage.Save(context.Background(), page)
+	if err != nil {
 		return err
 	}
 
-	if err := p.tg.SendMessage(chatId, msgSaved); err != nil {
+	if err := p.tg.SendMessage(chatId, msgSaved+strconv.Itoa(*id)); err != nil {
 		return err
 	}
 
@@ -93,7 +99,7 @@ func (p *Processor) sendRandom(chatId int, username string) (err error) {
 		return err
 	}
 
-	return p.storage.Remove(context.Background(), page)
+	return nil
 }
 
 func (p *Processor) sendList(chatId int, username string) (err error) {
@@ -109,13 +115,41 @@ func (p *Processor) sendList(chatId int, username string) (err error) {
 	var urls strings.Builder
 
 	for _, page := range pages {
-		urls.WriteString(page.URL + "\n")
+		fmt.Fprintf(&urls, "%d: %s\n\n", page.Id, page.URL)
 	}
 
 	if err := p.tg.SendMessage(chatId, urls.String()); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (p *Processor) deletePage(chatId int, text string, username string) (err error) {
+	defer func() { err = e.WrapIfErr("can't do command: can't delete page", err) }()
+	parts := strings.Fields(text)
+	if len(parts) != 2 {
+		return p.tg.SendMessage(chatId, msgWrongId)
+	}
+	id, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return p.tg.SendMessage(chatId, msgWrongId)
+	}
+	page := &storage.Page{
+		Id:       id,
+		UserName: username,
+	}
+	err = p.storage.Delete(context.Background(), page)
+	if err != nil && !errors.Is(err, storage.ErrPageNotFound) {
+		return err
+	}
+	if errors.Is(err, storage.ErrPageNotFound) {
+		return p.tg.SendMessage(chatId, msgNoListId)
+	}
+
+	if err := p.tg.SendMessage(chatId, msgDeleted); err != nil {
+		return err
+	}
 	return nil
 }
 
